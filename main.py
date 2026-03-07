@@ -1,15 +1,16 @@
 from fastapi import FastAPI, Depends, HTTPException
 from schemas.kemo_schema import UserRequest, TaskResponse
-from services.llm_service import DeepSeekService
+from services.llm_service_deepseek import DeepSeekService
+from services.llm_service_llama import LlamaService
 
 app = FastAPI(title="KEMO Cloud Brain")
 
 # Dependency Injection for the LLM Service
 def get_llm_service():
-    return DeepSeekService()
+    return LlamaService()
 
 @app.post("/api/plan", response_model=TaskResponse)
-def plan_tasks(req: UserRequest, llm: DeepSeekService = Depends(get_llm_service)):
+def plan_tasks(req: UserRequest, llm: LlamaService = Depends(get_llm_service)):
     """
     Receives voice text from the local Flutter app, 
     fetches the cached DeepSeek plan, and returns JSON.
