@@ -7,3 +7,4 @@ class UserRequest(BaseModel):
 class TaskResponse(BaseModel):
     status: str
     tasks: List[Dict[str, Any]]
+    message: str
