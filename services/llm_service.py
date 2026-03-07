@@ -36,7 +36,7 @@ class DeepSeekService:
         If no actions are needed, return: {"message": "Your response to the user according to the prompt"}
         """
 
-    def generate_plan(self, user_prompt: str) -> list:
+    def generate_plan(self, user_prompt: str) -> dict:
         # The dynamic user text is isolated to preserve the static cache above
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -53,7 +53,7 @@ class DeepSeekService:
             
             raw_text = response.choices[0].message.content
             parsed_json = json.loads(raw_text)
-            return parsed_json.get("tasks", [])
+            return parsed_json
             
         except Exception as e:
             print(f"DeepSeek Service Error: {e}")
