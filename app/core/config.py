@@ -1,11 +1,16 @@
 import os
 from dotenv import load_dotenv
-
+from pydantic_settings import BaseSettings, SettingsConfigDict
 load_dotenv()
 
-class Settings:
-    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY")
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY")
-    PROJECT_NAME: str = "KEMO Cloud Brain"
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    DB_CONNECTION: str
+    ALGORITHM: str
+    SECRET_KEY: str
+    DEEPSEEK_API_KEY: str
+    GROQ_API_KEY: str 
+    PROJECT_NAME: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
 
-settings = Settings()
+settings = Settings() #type: ignore
