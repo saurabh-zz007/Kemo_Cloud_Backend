@@ -1,10 +1,15 @@
 import json
-from openai import OpenAI
+from typing import Dict, Any
+from openai import AsyncOpenAI
+
 from app.core.config import settings
+from .repository import ChatRepository
+
 
 class DeepSeekService:
     def __init__(self):
-        self.client = OpenAI(
+        # Using AsyncOpenAI so FastAPI can handle requests concurrently
+        self.client = AsyncOpenAI(
             api_key=settings.DEEPSEEK_API_KEY, 
             base_url="https://api.deepseek.com"
         )
@@ -36,25 +41,42 @@ class DeepSeekService:
         If no actions are needed, return: {"message": "Your response to the user according to the prompt"}
         """
 
-    def generate_plan(self, user_prompt: str) -> dict:
-        # The dynamic user text is isolated to preserve the static cache above
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-        
+    async def generate_plan(self, user_id: str, user_prompt: str, repo: ChatRepository) -> Dict[str, Any]:
+        # 1. Fetch active session and short-term history from PostgreSQL
+        session = repo.get_or_create_active_session(user_id)
+        history = repo.get_recent_messages(session.id, limit=10)
+
+        # 2. Build the messages array starting with the CACHED system prompt
+        messages = [{"role": "system", "content": self.system_prompt}]
+
+        # 3. Inject short-term memory chronologically
+        for msg in history:
+            messages.append({"role": msg.role, "content": msg.content})
+
+        # 4. Append current user query at the end
+        messages.append({"role": "user", "content": user_prompt})
+
         try:
-            response = self.client.chat.completions.create(
+            # 5. Call DeepSeek asynchronously
+            response = await self.client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
-                temperature=0.0, # Zero creativity, strict logic
-                response_format={"type": "json_object"} # Forces valid JSON
+                temperature=0.0, # Strict logic execution
+                response_format={"type": "json_object"} # Guarantees valid JSON output
             )
             
             raw_text = response.choices[0].message.content
             parsed_json = json.loads(raw_text)
+
+            # 6. Save user query and AI response back to database
+            repo.save_message(session.id, role="user", content=user_prompt)
+            repo.save_message(session.id, role="assistant", content=raw_text)
+
             return parsed_json
             
         except Exception as e:
             print(f"DeepSeek Service Error: {e}")
-            return []
+            return {
+                "message": "An error occurred while generating a plan.",
+                "tasks": []
+            }

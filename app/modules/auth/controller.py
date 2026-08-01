@@ -48,6 +48,7 @@ def create_user(request: Request, user: create_user_schema, db: Session):
     try:
         raw_hash = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt())
         hashed_password_str = raw_hash.decode('utf-8')
+        print(f"Creating user with email: {user.email}, hashed_password: {hashed_password_str}, full_name: {user.full_name}")
         new_user = userModel(email=user.email, hashed_password=hashed_password_str, full_name=user.full_name)
         db.add(new_user)
         db.commit()

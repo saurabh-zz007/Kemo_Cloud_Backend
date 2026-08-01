@@ -21,7 +21,7 @@ def auth_login(request: Request, user: authenticate_user_schema, db  = Depends(g
 
 @auth_router.post("/create")
 def auth_signup(request: Request, user: create_user_schema, db = Depends(get_db)):
-    user = db_user = db.query(userModel).filter(userModel.email == user.email).first()
-    if user:
+    new_user = db_user = db.query(userModel).filter(userModel.email == user.email).first()
+    if new_user:
         raise HTTPException(status_code=400, detail="User already exists")
     return create_user(request, user, db)

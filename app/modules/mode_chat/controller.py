@@ -1,13 +1,45 @@
-from fastapi import Depends, HTTPException
-from app.modules.mode_chat.data_transfer_objects import UserRequest, TaskResponse
-from app.modules.mode_chat.service import DeepSeekService
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Dict, Any
 
-def mode_chat_controller(req: UserRequest, llm: DeepSeekService):
-    try:
-        tasks = llm.generate_plan(req.prompt)
-        task_list = tasks.get("tasks", [])
-        msg = tasks.get("message", "Task processed.")
-        return TaskResponse(status="success", tasks=task_list,message= msg)
-    except Exception as e:
-        print(f"CRITICAL ERROR: {repr(e)}")
-        raise HTTPException(status_code=500, detail="Internal Server Error during task planning.")
+from .repository import ChatRepository
+from .service import DeepSeekService
+from .data_transfer_objects import ChatRequest
+
+# Instantiating the service at module level to reuse the client & system prompt cache
+deepseek_service = DeepSeekService()
+
+class ChatController:
+    @staticmethod
+    async def process_user_query(
+        user_id: str,
+        request: ChatRequest,
+        db: AsyncSession
+    ) -> Dict[str, Any]:
+        """
+        Coordinates repository and service execution for incoming user prompts.
+        """
+        if not request.prompt.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Prompt cannot be empty."
+            )
+
+        try:
+            repo = ChatRepository(db)
+            
+            # Delegates memory fetching, LLM generation, and memory storage to service
+            plan = await deepseek_service.generate_plan(
+                user_id=user_id,
+                user_prompt=request.prompt,
+                repo=repo
+            )
+            
+            return plan
+
+        except Exception as e:
+            # Handle controller-level errors gracefully
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing chat request: {str(e)}"
+            )
