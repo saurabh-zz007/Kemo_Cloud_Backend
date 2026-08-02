@@ -43,8 +43,8 @@ class DeepSeekService:
 
     async def generate_plan(self, user_id: str, user_prompt: str, repo: ChatRepository) -> Dict[str, Any]:
         # 1. Fetch active session and short-term history from PostgreSQL
-        session = repo.get_or_create_active_session(user_id)
-        history = repo.get_recent_messages(session.id, limit=10)
+        session = await repo.get_or_create_active_session(user_id)
+        history = await repo.get_recent_messages(session.id, limit=10)
 
         # 2. Build the messages array starting with the CACHED system prompt
         messages = [{"role": "system", "content": self.system_prompt}]
@@ -69,8 +69,8 @@ class DeepSeekService:
             parsed_json = json.loads(raw_text)
 
             # 6. Save user query and AI response back to database
-            repo.save_message(session.id, role="user", content=user_prompt)
-            repo.save_message(session.id, role="assistant", content=raw_text)
+            await repo.save_message(session.id, role="user", content=user_prompt)
+            await repo.save_message(session.id, role="assistant", content=raw_text)
 
             return parsed_json
             
