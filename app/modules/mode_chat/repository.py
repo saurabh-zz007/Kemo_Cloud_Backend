@@ -33,8 +33,8 @@ class ChatRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())[::-1] # Reverse to chronological order
 
-    async def save_message(self, session_id: str, role: str, content: str) -> ChatMessage:
-        message = ChatMessage(session_id=session_id, role=role, content=content)
+    async def save_message(self, session_id: str, role: str, content: str, mode_name: str= "mode_chat") -> ChatMessage:
+        message = ChatMessage(session_id=session_id, role=role, content=content, mode_name=mode_name)
         self.session.add(message)
         
         # Touch the session's updated_at timestamp

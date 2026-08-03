@@ -1,10 +1,12 @@
 import json
 from typing import Dict, Any
 from openai import AsyncOpenAI
-
+import asyncio
 from app.core.config import settings
 from .repository import ChatRepository
+from app.modules.RAG.embedding import EmbeddingService
 
+embedding_service = EmbeddingService()
 
 class DeepSeekService:
     def __init__(self):
@@ -69,9 +71,17 @@ class DeepSeekService:
             parsed_json = json.loads(raw_text)
 
             # 6. Save user query and AI response back to database
-            await repo.save_message(session.id, role="user", content=user_prompt)
-            await repo.save_message(session.id, role="assistant", content=raw_text)
+            await repo.save_message(session.id, role="user", content=user_prompt, mode_name="mode_chat")
+            await repo.save_message(session.id, role="assistant", content=raw_text, mode_name="mode_chat")
 
+            # 7. Generate embedding asynchronously without blocking the main flow
+            asyncio.create_task(
+                embedding_service.generate_interaction_embedding(
+                    user_query=user_prompt,
+                    ai_response=raw_text,
+                    mode_name="mode_chat"
+                )
+            )
             return parsed_json
             
         except Exception as e:

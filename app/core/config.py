@@ -12,5 +12,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str 
     PROJECT_NAME: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
+    OPENAI_API_KEY: str
+    GEMINI_API_KEY: str
 
 settings = Settings() #type: ignore
