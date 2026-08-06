@@ -14,5 +14,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     OPENAI_API_KEY: str
     GEMINI_API_KEY: str
+    QDRANT_ENDPOINT: str
+    QDRANT_API_KEY: str
 
 settings = Settings() #type: ignore

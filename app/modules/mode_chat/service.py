@@ -4,9 +4,7 @@ from openai import AsyncOpenAI
 import asyncio
 from app.core.config import settings
 from .repository import ChatRepository
-from app.modules.RAG.embedding import EmbeddingService
-
-embedding_service = EmbeddingService()
+from app.modules.RAG.services import rag_pipeline_task
 
 class DeepSeekService:
     def __init__(self):
@@ -76,10 +74,11 @@ class DeepSeekService:
 
             # 7. Generate embedding asynchronously without blocking the main flow
             asyncio.create_task(
-                embedding_service.generate_interaction_embedding(
-                    user_query=user_prompt,
-                    ai_response=raw_text,
-                    mode_name="mode_chat"
+                rag_pipeline_task(
+                    mode_name="mode_chat",
+                    user_prompt=user_prompt,
+                    response=raw_text,
+                    user_id=user_id
                 )
             )
             return parsed_json
