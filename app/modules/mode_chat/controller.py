@@ -11,7 +11,7 @@ deepseek_service = DeepSeekService()
 
 class ChatController:
     @staticmethod
-    async def process_user_query(
+    def process_user_query(
         user_id: str,
         request: ChatRequest,
         db: AsyncSession
@@ -29,13 +29,13 @@ class ChatController:
             repo = ChatRepository(db)
             
             # Delegates memory fetching, LLM generation, and memory storage to service
-            plan = await deepseek_service.generate_plan(
+            generator = deepseek_service.generate_plan(
                 user_id=user_id,
                 user_prompt=request.prompt,
                 repo=repo
             )
             
-            return plan
+            return generator
 
         except Exception as e:
             # Handle controller-level errors gracefully

@@ -24,7 +24,8 @@ class EmbeddingService:
             # Use client.aio for asynchronous requests
             response = await self.client.aio.models.embed_content(
                 model=self.model,
-                contents=combined_text
+                contents=combined_text,
+                config={"task_type": "RETRIEVAL_DOCUMENT"}
             )
             
             # The SDK returns the embeddings here

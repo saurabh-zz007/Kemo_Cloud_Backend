@@ -1,3 +1,4 @@
+from genericpath import exists
 import uuid
 from qdrant_client import AsyncQdrantClient, models
 from app.core.config import settings
@@ -25,7 +26,34 @@ class QdrantService:
             field_schema=models.PayloadSchemaType.KEYWORD
         )
 
-    async def upsert_embadding(self, user_id: str, 
+    async def ensure_collection_exists(self) -> None:
+        exists = await self.client.collection_exists(self.collection_name)
+
+    # 1. Create collection if it doesn't exist
+        if not exists:
+            await self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=models.VectorParams(
+                    size=self.vector_size, 
+                    distance=models.Distance.COSINE
+                )
+        )
+
+    # 2. Ensure payload indexes are created once (Qdrant ignores if already present)
+        await self.client.create_payload_index(
+            collection_name=self.collection_name,
+            field_name="user_id",
+            field_schema=models.PayloadSchemaType.KEYWORD
+        )
+        await self.client.create_payload_index(
+            collection_name=self.collection_name,
+            field_name="mode_name",
+            field_schema=models.PayloadSchemaType.KEYWORD
+        )
+
+    async def upsert_embedding(
+        self, 
+        user_id: str, 
         vector_data: list[float], 
         user_query: str, 
         ai_response: str, 

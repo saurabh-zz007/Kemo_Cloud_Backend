@@ -1,10 +1,13 @@
 import json
-from typing import Dict, Any
-from openai import AsyncOpenAI
 import asyncio
+from typing import Dict, Any, AsyncGenerator
+from openai import AsyncOpenAI
 from app.core.config import settings
 from .repository import ChatRepository
 from app.modules.RAG.services import rag_pipeline_task
+from app.modules.RAG.vector_search import VectorSearchService
+
+vector_search_service = VectorSearchService()
 
 class DeepSeekService:
     def __init__(self):
@@ -41,51 +44,77 @@ class DeepSeekService:
         If no actions are needed, return: {"message": "Your response to the user according to the prompt"}
         """
 
-    async def generate_plan(self, user_id: str, user_prompt: str, repo: ChatRepository) -> Dict[str, Any]:
+    # Note the return type changed to AsyncGenerator to support streaming
+    async def generate_plan(self, user_id: str, user_prompt: str, repo: ChatRepository) -> AsyncGenerator[str, None]:
         # 1. Fetch active session and short-term history from PostgreSQL
         session = await repo.get_or_create_active_session(user_id)
-        history = await repo.get_recent_messages(session.id, limit=10)
+        history = await repo.get_recent_messages(session.id, limit=10) #type:ignore
 
         # 2. Build the messages array starting with the CACHED system prompt
-        messages = [{"role": "system", "content": self.system_prompt}]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
 
         # 3. Inject short-term memory chronologically
-        for msg in history:
-            messages.append({"role": msg.role, "content": msg.content})
+        #for msg in history:
+        #    messages.append({"role": msg.role, "content": msg.content})
+        # Fetch long-term memories from Qdrant filtered by user_id AND mode_chat
+        # 1. Fetch long-term memories
+        long_term_memory = await vector_search_service.search_similar_memories(
+            user_id=user_id, 
+            query=user_prompt,
+            mode_name="mode_chat"
+        )
 
+        # 2. Format the user prompt with strict XML boundaries
+        if long_term_memory:
+            augmented_user_prompt = (
+                f"<past_memories>\n{long_term_memory}\n</past_memories>\n\n"
+                f"User Question: {user_prompt}"
+            )
+        else:
+            augmented_user_prompt = user_prompt
+
+        # 3. Append to messages
+        messages.append({"role": "user", "content": augmented_user_prompt})
         # 4. Append current user query at the end
         messages.append({"role": "user", "content": user_prompt})
 
+        # We will build the full string here as it streams
+        full_text = ""
+
         try:
-            # 5. Call DeepSeek asynchronously
+            # 5. Call DeepSeek asynchronously with stream=True
             response = await self.client.chat.completions.create(
                 model="deepseek-chat",
-                messages=messages,
+                messages=messages, # type: ignore
                 temperature=0.0, # Strict logic execution
-                response_format={"type": "json_object"} # Guarantees valid JSON output
+                response_format={"type": "json_object"}, # Guarantees valid JSON output
+                stream=True,
             )
             
-            raw_text = response.choices[0].message.content
-            parsed_json = json.loads(raw_text)
+            # 6. Stream the chunks as they arrive
+            async for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_text += content  # Accumulate the text for the database
+                    yield content         # Yield chunk immediately to the frontend
 
-            # 6. Save user query and AI response back to database
+            # --- THE STREAM IS NOW FINISHED ---
+
+            # 7. Save user query and full AI response back to PostgreSQL
             await repo.save_message(session.id, role="user", content=user_prompt, mode_name="mode_chat")
-            await repo.save_message(session.id, role="assistant", content=raw_text, mode_name="mode_chat")
+            await repo.save_message(session.id, role="assistant", content=full_text, mode_name="mode_chat")
 
-            # 7. Generate embedding asynchronously without blocking the main flow
+            # 8. Generate embedding asynchronously without blocking the main flow
             asyncio.create_task(
                 rag_pipeline_task(
                     mode_name="mode_chat",
                     user_prompt=user_prompt,
-                    response=raw_text,
+                    response=full_text,
                     user_id=user_id
                 )
             )
-            return parsed_json
             
         except Exception as e:
             print(f"DeepSeek Service Error: {e}")
-            return {
-                "message": "An error occurred while generating a plan.",
-                "tasks": []
-            }
+            # If an error happens, yield a valid fallback JSON string
+            yield '{"message": "An error occurred while generating a plan.", "tasks": []}'
