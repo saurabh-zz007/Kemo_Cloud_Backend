@@ -7,6 +7,7 @@ embedding_service = EmbeddingService()
 qdrant_service = QdrantService()
 
 async def rag_pipeline_task(user_prompt: str, response: str, user_id: str, mode_name: str):
+    print("RAG pipeline task started")
     try:
         facts = await fact_extractor.extract_facts(user_prompt, response)
 
