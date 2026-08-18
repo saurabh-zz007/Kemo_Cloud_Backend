@@ -6,7 +6,7 @@ from app.core.config import settings
 from .repository import ChatRepository
 from app.modules.RAG.services import rag_pipeline_task
 from app.modules.RAG.vector_search import VectorSearchService
-from app.common.Tools.search_tool import SearchTool
+from app.common.Tools.search_tool import WebSearchTool
 
 vector_search_service = VectorSearchService()
 
@@ -16,47 +16,88 @@ class DeepSeekService:
             api_key=settings.DEEPSEEK_API_KEY, 
             base_url="https://api.deepseek.com"
         )
-        self.search_tool = SearchTool()
-        
+        self.search_tool = WebSearchTool()
+        self.tool_registry = {
+            "web_search": self.search_tool.search,
+            "web_extract": self.search_tool.extract,
+            "web_crawl": self.search_tool.crawl,
+            #add your tools here nigga 
+        }
 
         self.system_prompt = """
-        You are KEMO, an AI desktop assistant system brain.
-        You have to decide weather the user needs to :
-        Case-1. Do some physical tasks or actions with pc.
-        Case-2. If wants to talk or get some general information on coding, system or anything.
-        Case-3. If the user needs mix of both things.
-        According to the user prompt.
+        You are KEMO, an AI desktop assistant system brain operating strictly as a Tier 3 Web Worker.
+        You do NOT have permissions to execute physical OS tasks, open applications, or modify local environments. Your sole responsibility is to act as the primary research and data-ingestion engine, either directly answering user queries or fulfilling research directives passed down by upper-tier orchestrator AIs.
 
-        Available actions:
-        - "openApp" (requires 'app_name')
-        - "closeApp" (requires 'app_name')
-        - "getSystemStatus" (no arguments)
-        - "optimizeSystem" (no arguments)
-        - "setupEnvironment" (requires 'package_id')
-        - "removeEnvironment" (requires 'package_id')
-        Critical: For setupEnvironment and removeEnvironment, the package id should be from windows winget list. Check the latest data of official winget before returning the package names.
+        Your decision engine must analyze the prompt and route your behavior into one of the following execution paths:
 
-        For Case-1 and Case-3.
-        You MUST respond in strict JSON format containing a "tasks" array.
-        Example: {"tasks": [{"action": "setupEnvironment", "arguments": {"package_id": "OpenJS.NodeJS"}}], "message": "Trying to setup OpenJS.NodeJS environment"}
+        - Case 1: Web Research & Data Gathering (Using web search, extraction, and crawling to ingest live data, read documentation, or verify facts).
+        - Case 2: General Intelligence (Conversational replies, writing code, or explaining concepts using your internal knowledge or the context provided).
+        - Case 3: Hybrid (Combining multiple research actions to build a complete answer).
 
-        For Case-2.
-        If no actions are needed, return: {"message": "Your response to the user according to the prompt"}
+        =========================================
+        AVAILABLE ACTIONS
+        =========================================
+
+        [Web Research Actions]
+        - "web_search" (requires: 'query') 
+        Use to find real-time information, news, or discover URLs you don't know yet.
+        - "web_extract" (requires: 'url') 
+        Use to read the full text from a specific, known URL.
+        - "web_crawl" (requires: 'url', optional: 'instructions') 
+        Use to deeply scan documentation or map an entire domain.
+
+        =========================================
+        OUTPUT FORMAT (STRICT JSON)
+        =========================================
+        You MUST respond EXCLUSIVELY in valid JSON format. Do not include markdown code blocks (```json) around your response, no conversational filler outside the JSON, and no preambles. 
+
+        IF ACTIONS ARE NEEDED (Case 1 and Case 3):
+        Return a JSON object containing a "tasks" array of the research actions to execute, and a "message" explaining your research intent.
+        {
+        "tasks": [
+            {
+            "action": "<action_name>",
+            "arguments": {
+                "<arg_key>": "<arg_value>"
+            }
+            }
+        ],
+        "message": "<Concise are explanation initiating. of research the you>"
+        }
+
+        IF NO ACTIONS ARE NEEDED (Case 2):
+        Return a JSON object containing only a "message" key. 
+        {
+        "message": "<Your complete, conversational detailed generated or response.>"
+        }
+
+        =========================================
+        EXAMPLES
+        =========================================
+        Example 1: Deep research request from an upper-tier AI.
+        {"tasks": [{"action": "web_crawl", "arguments": {"url": "[https://docs.tavily.com](https://docs.tavily.com)", "instructions": "Extract all API endpoint parameters"}}], "message": "Crawling the Tavily documentation to extract the requested API parameters."}
+
+        Example 2: Answering a general question without tools.
+        {"message": "Python FastAPI is an excellent choice for building asynchronous APIs due to its native support for async/await and automatic interactive documentation generation."}
         """
     async def _execute_tool(self, tool_name: str, arguments_str: str, user_prompt: str) -> str:
+        print(f"Executing tool: {tool_name} with arguments: {arguments_str}")
         try:
             args = json.loads(arguments_str) if arguments_str else {}
         except Exception:
             args = {}
 
-        match tool_name:
-            case "web_search":
-                query = args.get("query", user_prompt)
-                return await self.search_tool.search(query=query)
+        tool_function = self.tool_registry.get(tool_name)
 
-
-            case _:
-                return f"Error: Tool '{tool_name}' is not registered."
+        if not tool_function:
+            return f"Error: Tool '{tool_name}' is not registered."
+            
+        try:
+            return await tool_function(**args)
+        
+        except Exception as e:
+            print(f"[TOOL EXECUTOR ERROR] Failed running {tool_name}: {e}")
+            return f"Observation: The tool '{tool_name}' encountered an error: {str(e)}"
             
 
     async def generate_plan(self, user_id: str, user_prompt: str, repo: ChatRepository) -> AsyncGenerator[str, None]:
@@ -99,6 +140,73 @@ class DeepSeekService:
                             }
                         },
                         "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "web_extract",
+                    "description": "Extract clean, raw text content from a specific URL. Use this when you already have a link and need to read the full page.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "The specific URL to extract content from."
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": "Optional. A query to focus the extraction on specific information, returning relevant chunks instead of the full page."
+                            },
+                            "extract_depth": {
+                                "type": "string",
+                                "enum": ["basic", "advanced"],
+                                "description": "Optional. 'basic' is faster, 'advanced' bypasses more complex site protections. Defaults to 'basic'."
+                            },
+                            "chunks": {
+                                "type": "integer",
+                                "description": "Optional. The maximum number of relevant snippets to return per source. Only used if 'query' is provided. Defaults to 3."
+                            }
+                        },
+                        "required": ["url"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "web_crawl",
+                    "description": "Crawl a website starting from a specific URL to discover and extract information across multiple pages.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "The root URL to begin the crawl."
+                            },
+                            "instructions": {
+                                "type": "string",
+                                "description": "Optional. Natural language instructions to guide the crawler (e.g., 'Find all pricing pages'). Required if using chunks_per_source."
+                            },
+                            "chunks_per_source": {
+                                "type": "integer",
+                                "description": "Optional. Max snippets to extract per page. Requires 'instructions' to be set. Defaults to 3."
+                            },
+                            "max_depth": {
+                                "type": "integer",
+                                "description": "Optional. How many levels deep to click from the starting URL. Defaults to 1."
+                            },
+                            "max_breadth": {
+                                "type": "integer",
+                                "description": "Optional. Maximum links to follow per page level. Defaults to 10."
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Optional. The hard limit on total pages to crawl and process. Defaults to 1."
+                            }
+                        },
+                        "required": ["url"]
                     }
                 }
             }
