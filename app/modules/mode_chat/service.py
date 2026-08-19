@@ -213,7 +213,7 @@ class DeepSeekService:
         ]
 
         full_text = ""
-        max_tool_iterations = 3
+        max_tool_iterations = 8
         iteration = 0
 
         try:

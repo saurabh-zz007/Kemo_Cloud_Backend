@@ -8,7 +8,7 @@ class QueryTransformerService:
             api_key=settings.GROQ_API_KEY,
             base_url="https://api.groq.com/openai/v1"
         )
-        self.model = "llama-3.1-8b-instant"
+        self.model = "openai/gpt-oss-20b"
 
         self.system_prompt = """
         You are an elite Query Transformation agent for a RAG memory retrieval pipeline.

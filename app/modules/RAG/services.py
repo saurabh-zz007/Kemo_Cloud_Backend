@@ -29,8 +29,7 @@ async def rag_pipeline_task(user_prompt: str, response: str, user_id: str, mode_
                 await qdrant_service.upsert_embedding(
                     user_id=user_id,
                     vector_data=vector,
-                    user_query=user_prompt,
-                    ai_response=fact,
+                    fact_data =fact,
                     mode_name=mode_name
                 )
     except Exception as e:
