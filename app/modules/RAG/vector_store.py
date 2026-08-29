@@ -139,7 +139,9 @@ class QdrantService:
                 memory_blocks.append({
                     "id": str(hit.id),
                     "score": hit.score,
-                    "fact": hit.payload.get("fact_text", "") if hit.payload else "" # Keep key consistent with upsert
+                    "fact_data": hit.payload.get("fact_data", "") if hit.payload else "",  # Keep key consistent with upsert
+                    "created_at": hit.payload.get("created_at", "") if hit.payload else "",
+                    "updated_at": hit.payload.get("updated_at", "") if hit.payload else ""
                 })
             print(f"[QDRANT SEARCH] Found {len(memory_blocks)} results for mode '{mode_name}'")
             return memory_blocks
@@ -171,7 +173,9 @@ class QdrantService:
                 return None
             return {
                 "id": str(hit.id),
-                "fact": hit.payload.get("fact_text", "") if hit.payload else ""
+                "fact_data": hit.payload.get("fact_data", "") if hit.payload else "",
+                "created_at": hit.payload.get("created_at", "") if hit.payload else "",
+                "updated_at": hit.payload.get("updated_at", "") if hit.payload else ""
             }
         except Exception as e:
             print(f"[RAG RETRIEVE ERROR] Failed to retrieve memory for mode '{mode_name}': {e}")

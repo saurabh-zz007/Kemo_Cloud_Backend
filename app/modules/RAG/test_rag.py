@@ -1,23 +1,14 @@
-import asyncio
-from app.modules.RAG.embedding import EmbeddingService
+from qdrant_client import QdrantClient
 
-async def test_embedding():
-    print("Testing OpenAI Embedding Service...")
-    service = EmbeddingService()
-    
-    # Dummy interaction
-    vector = await service.generate_interaction_embedding(
-        user_query="How do I set up Node.js?",
-        ai_response="I can install OpenJS.NodeJS via winget for you.",
-        mode_name="mode_chat"
-    )
+# Connect to your self-hosted instance
+client = QdrantClient(url="http://localhost:6333")
 
-    if vector and len(vector) > 0:
-        print("✅ SUCCESS! Embedding Service is working.")
-        print(f"Vector Length: {len(vector)} floats")
-        print(f"Sample: {vector[:3]}...")
-    else:
-        print("❌ FAILED! Check your OPENAI_API_KEY in .env")
+collection_name = "your_collection_name"
 
-if __name__ == "__main__":
-    asyncio.run(test_embedding())
+# Check if it exists before trying to delete
+if client.collection_exists(collection_name=collection_name):
+    # Execute the deletion
+    client.delete_collection(collection_name=collection_name)
+    print(f"Collection '{collection_name}' successfully deleted.")
+else:
+    print(f"Collection '{collection_name}' does not exist.")

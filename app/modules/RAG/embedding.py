@@ -11,13 +11,12 @@ class EmbeddingService:
         self.model = "gemini-embedding-001"
 
 
-    async def generate_interaction_embedding(self, user_query: str, ai_response: str, mode_name: str) -> list[float]:
+    async def generate_interaction_embedding(self, fact_data: str, mode_name: str) -> list[float]:
         print(f"\n--- [RAG] Starting embedding for: {mode_name} ---")
 
         combined_text = (
             f"[Mode: {mode_name}]\n"
-            f"User: {user_query}\n"
-            f"Kemo: {ai_response}"
+            f"facts: {fact_data}"
         )
 
         try:
@@ -25,17 +24,12 @@ class EmbeddingService:
             response = await self.client.aio.models.embed_content(
                 model=self.model,
                 contents=combined_text,
-                config={"task_type": "RETRIEVAL_DOCUMENT"}
             )
             
             # The SDK returns the embeddings here
-            vector = response.embeddings[0].values
+            vector = response.embeddings[0].values #type: ignore
             
-            print(f"[RAG SUCCESS] Vector Dimensions: {len(vector)}") 
-            print(f"[RAG SUCCESS] First 5 values: {vector[:5]}...\n")
-
-            
-            return vector
+            return vector  #type: ignore
             
         except Exception as e:
             print(f"\n[RAG ERROR] Embedding generation failed: {e}\n")
