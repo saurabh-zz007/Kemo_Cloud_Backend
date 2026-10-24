@@ -9,6 +9,7 @@ auth_router = APIRouter(prefix="/api/auth")
 
 @auth_router.post("/login")
 async def auth_login(request: Request, user: authenticate_user_schema, db  = Depends(get_db)):
+    print("Login request received")
     user_req = select(userModel).where(userModel.email == user.email)
     find_user = await db.execute(user_req)
     final_user = find_user.scalars().first()

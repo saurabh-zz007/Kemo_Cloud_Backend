@@ -1,6 +1,6 @@
-from app.modules.RAG.embedding import EmbeddingService
-from app.modules.RAG.vector_store import QdrantService
-from app.modules.RAG.fast_extractor import FactExtractorService
+from app.common.RAG.embedding import EmbeddingService
+from app.common.RAG.vector_store import QdrantService
+from app.common.RAG.fast_extractor import FactExtractorService
 
 fact_extractor = FactExtractorService()
 embedding_service = EmbeddingService()
