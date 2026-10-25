@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     QDRANT_ENDPOINT: str
     QDRANT_API_KEY: str
     TAVILY_API_KEY: str
+    OPENROUTER_API_KEY: str
+    OPENROUTER_BASE_URL: str
+    OPENROUTER_PLANNER_MODEL_NAME: str
+    OPENROUTER_WORKER_MODEL_NAME: str
+    OPENROUTER_SYNTHESIZER_MODEL_NAME: str
     TEST_USER_ID: str
 
 settings = Settings() #type: ignore

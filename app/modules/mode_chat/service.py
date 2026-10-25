@@ -6,16 +6,21 @@ from typing import Dict, Any, AsyncGenerator
 from openai import AsyncOpenAI
 
 from app.core.config import settings
+from app.core.config import settings
 from .repository import ChatRepository
 from app.common.RAG.services import delete_memory_service, update_memory_services, add_memory_service, search_memory_service
 from app.common.Tools.search_tool import WebSearchTool
 from app.modules.mode_chat.tool_definition import WEB_TOOLS, MEMORY_TOOLS
+from app.modules.mode_chat.system_prompt import direct_system_prompt_reasoning, direct_system_prompt_synthesizer, worker_system_prompt_reasoning, worker_system_prompt_synthesis
 
 class DeepSeekService:
     def __init__(self):
         self.client = AsyncOpenAI(
-            api_key=settings.DEEPSEEK_API_KEY, 
-            base_url="https://api.deepseek.com"
+            api_key=settings.OPENROUTER_API_KEY, 
+            base_url=settings.OPENROUTER_BASE_URL,
+            default_headers={
+                "X-Title": settings.PROJECT_NAME, 
+            }
         )
         self.mode_name = "mode_chat"
         self.search_tool = WebSearchTool()
@@ -29,63 +34,7 @@ class DeepSeekService:
             "search_memory": search_memory_service
         }
 
-        self.reasoning_prompt = """
-        CRITICAL: You are an autonomous backend processor. NEVER narrate your plans. If you need data, output ONLY the tool call.
-
-        Your decision engine must analyze the prompt and route your behavior into one of the following execution paths:
-
-        Case 1: Web Research (Using web search, extraction, and crawling to ingest live data, read documentation, or verify facts).
-
-        Case 2: Memory Management (Saving, recalling, updating, or deleting facts about the user, their projects, or preferences using the vector database).
-
-        Case 3: Hybrid (Combining multiple research or memory actions to build a complete answer).
-
-        =========================================
-        AVAILABLE ACTIONS
-        [Web Research Actions]
-
-        "web_search" (requires: 'query')
-        Use to find real-time information, news, or discover URLs you don't know yet.
-
-        "web_extract" (requires: 'url')
-        Use to read the full text from a specific, known URL.
-
-        "web_crawl" (requires: 'url', optional: 'instructions')
-        Use to deeply scan documentation or map an entire domain.
-
-        [Memory Actions]
-
-        "add_memory" (requires: 'fact_data' [array of strings])
-        Use to save important new facts, user preferences, or project details to long-term memory.
-
-        "search_memory" (requires: 'query_text')
-        Use to search long-term memory for past context, user preferences, or past conversations via semantic search.
-
-        "update_memory" (requires: 'point_id', 'update_fact_data')
-        Use to update an existing memory when the user changes their mind or a previously saved fact becomes outdated. Requires a point_id from a previous search.
-
-        "delete_memory" (requires: 'point_id')
-        Use to permanently delete a memory that is incorrect or no longer relevant. Requires a point_id from a previous search.
-
-        =========================================
-        MEMORY PROTOCOL & CONFLICT RESOLUTION
-        =========================================
-        1. RECONCILIATION BEFORE WRITING:
-        - Before adding a new fact, you MUST FIRST call `search_memory` to check if a prior version exists.
-        - If an existing memory conflicts with or is superseded by the new information:
-            - DO NOT call `add_memory`.
-            - Take the `id` from the search result and call `update_memory(point_id, update_fact_data)` or `delete_memory(point_id)`.
-
-        2. NEVER CREATE CONFLICTING DUPLICATES:
-        - If a search reveals two contradictory facts (e.g., two different names), prompt the user or update the record to reflect the latest confirmed fact.
         
-        =========================================
-        CRITICAL EXECUTION RULE
-        =========================================
-        You must perform actions using ONLY the provided native function tools. Do not output raw JSON plans, tasks arrays, or manual function calls in your text response. If an action is required, trigger the tool directly through the API.
-        NEVER narrate your plan or explain what you are going to do before calling a tool. If an action is required, trigger the tool immediately without conversational filler.
-        """
-        self.synthesis_prompt = """You are KEMO, an AI desktop assistant. Using the context and research provided in the conversation history, synthesize a clear, helpful, and highly conversational response to the user. Do not mention your internal tools, reasoning loops, or memory databases to the user."""
     async def _execute_tool(self, tool_name: str, arguments_str: str,user_id:str, user_prompt: str) -> str:
         print(f"Executing tool: {tool_name} with arguments: {arguments_str}")
         try:
@@ -121,9 +70,12 @@ class DeepSeekService:
         self, 
         user_id: str, 
         messages: list[dict[str, Any]], 
-        tools: list[dict[str, Any]]
+        tools: list[dict[str, Any]],
+        system_prompt_reasoning: str,
+        system_prompt_synthesizer: str
     ) -> AsyncGenerator[str, None]:
-    
+
+
         full_text = ""
         max_tool_iterations = 8
         iteration = 0
@@ -142,7 +94,7 @@ class DeepSeekService:
                     temp_message[0]["content"] += f"\n\nCRITICAL SYSTEM UPDATE: Reasoning loop iterations remaining: {budget_remaining}."
 
                 response = await self.client.chat.completions.create(
-                    model="deepseek-chat",
+                    model=settings.OPENROUTER_WORKER_MODEL_NAME,
                     messages=temp_message,  # type: ignore
                     tools=tools if tools else None,  # type: ignore
                     tool_choice="auto",
@@ -150,7 +102,7 @@ class DeepSeekService:
                 )
 
                 response_message = response.choices[0].message
-
+                
                 if response_message.tool_calls:
                     print(f"[DEEPSEEK] Tool call requested: {len(response_message.tool_calls)} tool(s)")
 
@@ -195,9 +147,9 @@ class DeepSeekService:
 
             print("[DEEPSEEK] Streaming final response...")
 
-            messages[0]["content"] = self.synthesis_prompt
+            messages[0]["content"] = system_prompt_synthesizer
             stream_response = await self.client.chat.completions.create(
-                model="deepseek-chat",
+                model=settings.OPENROUTER_WORKER_MODEL_NAME,
                 messages=messages,  # type: ignore
                 # Note: We do NOT pass tools here so it focuses entirely on text generation
                 temperature=0.0,
@@ -225,7 +177,7 @@ class DeepSeekService:
         session = await repo.get_or_create_active_session(user_id)
         history = await repo.get_recent_messages(session.id, limit=10)
         
-        messages = [{"role": "system", "content": self.reasoning_prompt}]
+        messages = [{"role": "system", "content": direct_system_prompt_reasoning}]
         for msg in history:
             messages.append({"role": msg.role, "content": msg.content})
         messages.append({"role": "user", "content": user_prompt})
@@ -233,7 +185,7 @@ class DeepSeekService:
         available_tools = WEB_TOOLS + MEMORY_TOOLS
         
         full_response = ""
-        async for chunk in self.generate_plan(user_id, messages, available_tools):
+        async for chunk in self.generate_plan(user_id, messages, available_tools, direct_system_prompt_reasoning, direct_system_prompt_synthesizer):
             full_response += chunk
             yield chunk
             
@@ -243,14 +195,14 @@ class DeepSeekService:
 
     async def handle_research_subtask(self, user_id: str, task_query: str) -> str:
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self.reasoning_prompt},
+            {"role": "system", "content": worker_system_prompt_reasoning},
             {"role": "user", "content": f"Research Task: {task_query}"}
         ]
 
         available_tools = WEB_TOOLS
 
         full_response = ""
-        async for chunk in self.generate_plan(user_id, messages, available_tools):
+        async for chunk in self.generate_plan(user_id, messages, available_tools, worker_system_prompt_reasoning, worker_system_prompt_synthesis):
             full_response += chunk
 
         return full_response
