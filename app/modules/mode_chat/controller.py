@@ -29,7 +29,7 @@ class ChatController:
             repo = ChatRepository(db)
             
             # Delegates memory fetching, LLM generation, and memory storage to service
-            generator = deepseek_service.generate_plan(
+            generator = deepseek_service.handle_direct_chat(
                 user_id=user_id,
                 user_prompt=request.prompt,
                 repo=repo

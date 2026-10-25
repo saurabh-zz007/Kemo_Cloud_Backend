@@ -8,7 +8,10 @@ from app.core.helper import get_user_id
 
 from .data_transfer_objects import ChatRequest, ChatResponse
 from .controller import ChatController
+from .service import DeepSeekService
+from app.core.config import settings
 
+deepseek_service=DeepSeekService()
 mode_chat_router = APIRouter(prefix="/chat", tags=["Chat"])
 
 @mode_chat_router.post(
@@ -21,9 +24,25 @@ async def chat_endpoint(
     user_id: str = Depends(get_user_id),
     db: AsyncSession = Depends(get_db)
 ):
-    generator=ChatController.process_user_query(
+    generator= ChatController.process_user_query(
         user_id=user_id,
         request=request,
         db=db
     )
     return StreamingResponse(generator, media_type="text/event-stream")
+
+
+
+@mode_chat_router.post("/test-research")
+async def test_research_endpoint(request: ChatRequest):
+    """
+    Test endpoint for the Layer 2 LangGraph worker.
+    This does NOT stream. It waits for the worker to finish and returns the full string.
+    """
+    
+    final_result_string = await deepseek_service.handle_research_subtask(
+        user_id=settings.TEST_USER_ID, 
+        task_query=request.prompt
+    )
+    
+    return {"result": final_result_string}

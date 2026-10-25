@@ -17,5 +17,6 @@ class Settings(BaseSettings):
     QDRANT_ENDPOINT: str
     QDRANT_API_KEY: str
     TAVILY_API_KEY: str
+    TEST_USER_ID: str
 
 settings = Settings() #type: ignore
